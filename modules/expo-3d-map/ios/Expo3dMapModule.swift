@@ -8,6 +8,9 @@ public class Expo3dMapModule: Module {
       Prop("earthquakeData") { (view: Expo3dMapView, data: [[String: Any]]) in
         view.updateEarthquakes(data)
       }
+      Prop("weatherLayer") { (view: Expo3dMapView, layer: String?) in
+        view.updateWeatherLayer(layer)
+      }
     }
   }
 }

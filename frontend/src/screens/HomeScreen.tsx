@@ -25,12 +25,29 @@ const FEED_OPTIONS: FeedOption[] = [
   { label: 'Significant (Past 7 Days)', url: 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/significant_week.geojson' },
 ];
 
+type WeatherOption = {
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  layer: string | null;
+};
+
+const WEATHER_OPTIONS: WeatherOption[] = [
+  { label: 'Clear Overlays', icon: 'close-circle', layer: null },
+  { label: 'Rain / Radar', icon: 'rainy', layer: 'precipitation_new' },
+  { label: 'Clouds', icon: 'cloud', layer: 'clouds_new' },
+  { label: 'Wind', icon: 'navigate', layer: 'wind_new' },
+  { label: 'Heat / Temperature', icon: 'thermometer', layer: 'temp_new' },
+];
+
 export default function HomeScreen() {
   const { setCurrentRegion } = useAppContext();
   const [activeFeed, setActiveFeed] = useState<FeedOption>(FEED_OPTIONS[0]);
-  const [isModalVisible, setIsModalVisible] = useState(false);
+  const [isEarthquakeModalVisible, setIsEarthquakeModalVisible] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [earthquakeData, setEarthquakeData] = useState<EarthquakeFeature[]>([]);
+
+  const [activeWeather, setActiveWeather] = useState<WeatherOption>(WEATHER_OPTIONS[0]);
+  const [isWeatherModalVisible, setIsWeatherModalVisible] = useState(false);
 
   useEffect(() => {
     // Mock setting the current region to San Francisco for the AI context
@@ -38,7 +55,7 @@ export default function HomeScreen() {
   }, []);
 
   const selectFeed = async (feed: FeedOption) => {
-    setIsModalVisible(false);
+    setIsEarthquakeModalVisible(false);
     setActiveFeed(feed);
 
     if (!feed.url) {
@@ -66,18 +83,30 @@ export default function HomeScreen() {
     }
   };
 
+  const selectWeather = (weather: WeatherOption) => {
+    setActiveWeather(weather);
+    setIsWeatherModalVisible(false);
+  };
+
   const isEarthquakeMode = activeFeed.url !== null;
+  const isWeatherMode = activeWeather.layer !== null;
 
   return (
     <View style={styles.container}>
-      <Expo3dMapView style={styles.map} earthquakeData={earthquakeData} />
+      <Expo3dMapView 
+        style={styles.map} 
+        earthquakeData={earthquakeData} 
+        weatherLayer={activeWeather.layer}
+      />
 
-      {/* Realtime Earthquake Toggle - Top Left */}
+      {/* Action Buttons - Top Left */}
       <View style={styles.topLeftContainer}>
+        {/* Earthquake Button */}
         <TouchableOpacity 
-          onPress={() => setIsModalVisible(true)}
+          onPress={() => setIsEarthquakeModalVisible(true)}
           disabled={isLoading}
           activeOpacity={0.7}
+          style={styles.actionButtonContainer}
         >
           <BlurView intensity={100} tint="dark" style={styles.glassButton}>
             {isLoading ? (
@@ -87,18 +116,29 @@ export default function HomeScreen() {
             )}
           </BlurView>
         </TouchableOpacity>
+
+        {/* Weather Button */}
+        <TouchableOpacity 
+          onPress={() => setIsWeatherModalVisible(true)}
+          activeOpacity={0.7}
+          style={styles.actionButtonContainer}
+        >
+          <BlurView intensity={100} tint="dark" style={styles.glassButton}>
+            <Ionicons name="partly-sunny" size={20} color={isWeatherMode ? "#0A84FF" : "#fff"} />
+          </BlurView>
+        </TouchableOpacity>
       </View>
 
       <AgenticAIAssistant />
 
-      {/* Feed Selection Modal - Small Liquid Glass */}
+      {/* Earthquake Feed Selection Modal */}
       <Modal
-        visible={isModalVisible}
+        visible={isEarthquakeModalVisible}
         transparent={true}
         animationType="fade"
-        onRequestClose={() => setIsModalVisible(false)}
+        onRequestClose={() => setIsEarthquakeModalVisible(false)}
       >
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setIsModalVisible(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setIsEarthquakeModalVisible(false)}>
           <BlurView intensity={100} tint="dark" style={styles.glassModal}>
             <Text style={styles.modalTitle}>Earthquake Feed</Text>
             <FlatList
@@ -108,18 +148,59 @@ export default function HomeScreen() {
               renderItem={({ item }) => (
                 <TouchableOpacity
                   style={[
-                    styles.feedOption,
-                    activeFeed.label === item.label && styles.feedOptionActive
+                    styles.optionItem,
+                    activeFeed.label === item.label && styles.optionItemActive
                   ]}
                   onPress={() => selectFeed(item)}
                 >
                   <Text style={[
-                    styles.feedOptionText,
-                    activeFeed.label === item.label && styles.feedOptionTextActive
+                    styles.optionText,
+                    activeFeed.label === item.label && styles.optionTextActive
                   ]}>
                     {item.label}
                   </Text>
                   {activeFeed.label === item.label && (
+                    <Ionicons name="checkmark" size={14} color="#fff" />
+                  )}
+                </TouchableOpacity>
+              )}
+            />
+          </BlurView>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Weather Layer Selection Modal */}
+      <Modal
+        visible={isWeatherModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setIsWeatherModalVisible(false)}
+      >
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setIsWeatherModalVisible(false)}>
+          <BlurView intensity={100} tint="dark" style={styles.glassModalWeather}>
+            <Text style={styles.modalTitle}>Weather Layer</Text>
+            <FlatList
+              data={WEATHER_OPTIONS}
+              keyExtractor={(item) => item.label}
+              scrollEnabled={false}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={[
+                    styles.optionItem,
+                    activeWeather.label === item.label && styles.optionItemWeatherActive
+                  ]}
+                  onPress={() => selectWeather(item)}
+                >
+                  <View style={styles.weatherOptionLeft}>
+                    <Ionicons name={item.icon} size={16} color={activeWeather.label === item.label ? "#fff" : "rgba(255,255,255,0.7)"} style={styles.weatherIcon} />
+                    <Text style={[
+                      styles.optionText,
+                      activeWeather.label === item.label && styles.optionTextActive
+                    ]}>
+                      {item.label}
+                    </Text>
+                  </View>
+                  {activeWeather.label === item.label && (
                     <Ionicons name="checkmark" size={14} color="#fff" />
                   )}
                 </TouchableOpacity>
@@ -146,6 +227,9 @@ const styles = StyleSheet.create({
     left: 20,
     zIndex: 1000,
   },
+  actionButtonContainer: {
+    marginBottom: 12,
+  },
   glassButton: {
     width: 46,
     height: 46,
@@ -158,13 +242,28 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.15)', // Lighter background
+    backgroundColor: 'rgba(0,0,0,0.15)',
   },
   glassModal: {
     position: 'absolute',
-    top: 90, // 60 (top of button) + 44 (height) + 8 (gap)
-    left: 70, // Align with button
-    width: 240, // Small modal
+    top: 90, 
+    left: 70, 
+    width: 240,
+    borderRadius: 24,
+    padding: 16,
+    overflow: 'hidden',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.2)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+  },
+  glassModalWeather: {
+    position: 'absolute',
+    top: 148, // Aligned with the second button (90 + 46 + 12 gap)
+    left: 70, 
+    width: 240,
     borderRadius: 24,
     padding: 16,
     overflow: 'hidden',
@@ -182,7 +281,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: '#ffffffff',
   },
-  feedOption: {
+  optionItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -192,14 +291,24 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     backgroundColor: 'rgba(255,255,255,0.1)',
   },
-  feedOptionActive: {
-    backgroundColor: 'rgba(255, 59, 48, 0.9)',
+  optionItemActive: {
+    backgroundColor: 'rgba(255, 59, 48, 0.9)', // Red for earthquake
   },
-  feedOptionText: {
+  optionItemWeatherActive: {
+    backgroundColor: 'rgba(10, 132, 255, 0.9)', // Blue for weather
+  },
+  weatherOptionLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  weatherIcon: {
+    marginRight: 8,
+  },
+  optionText: {
     fontSize: 13,
     color: 'rgba(255,255,255,0.7)',
   },
-  feedOptionTextActive: {
+  optionTextActive: {
     color: '#fff',
     fontWeight: '700',
   }
