@@ -1,0 +1,9 @@
+{
+  "platforms": ["apple", "android", "web"],
+  "apple": {
+    "modules": ["Expo3dMapModule"]
+  },
+  "android": {
+    "modules": ["expo.modules.3dmap.Expo3dMapModule"]
+  }
+}
