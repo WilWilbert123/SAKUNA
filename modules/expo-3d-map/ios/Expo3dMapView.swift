@@ -2,6 +2,33 @@ import ExpoModulesCore
 import MapKit
 import UIKit
 
+// Custom Tile Overlay to gracefully handle OpenWeatherMap 401 Unauthorized errors
+// so that VectorKit doesn't crash trying to decode JSON error messages as PNG images.
+class WeatherTileOverlay: MKTileOverlay {
+    override func loadTile(at path: MKTileOverlayPath, result: @escaping (Data?, Error?) -> Void) {
+        let url = self.url(forTilePath: path)
+        let request = URLRequest(url: url)
+        
+        let task = URLSession.shared.dataTask(with: request) { data, response, error in
+            let transparentPNG = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=")!
+            
+            if error != nil {
+                result(transparentPNG, nil)
+                return
+            }
+            
+            if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode != 200 {
+                // Return a transparent 1x1 PNG so VectorKit decodes an invisible image instead of an error/JSON.
+                result(transparentPNG, nil)
+                return
+            }
+            
+            result(data, nil)
+        }
+        task.resume()
+    }
+}
+
 // Custom annotation to hold magnitude data
 class EarthquakeAnnotation: MKPointAnnotation {
     var magnitude: Double = 0.0
@@ -9,6 +36,7 @@ class EarthquakeAnnotation: MKPointAnnotation {
 
 class Expo3dMapView: ExpoView, MKMapViewDelegate {
     let mapView = MKMapView()
+    var activeWeatherOverlay: MKTileOverlay?
 
     required init(appContext: AppContext? = nil) {
         super.init(appContext: appContext)
@@ -49,6 +77,77 @@ class Expo3dMapView: ExpoView, MKMapViewDelegate {
         }
         
         mapView.addAnnotations(annotations)
+    }
+
+    func updateWeatherLayer(_ layerType: String?) {
+        // Remove existing weather overlay
+        if let currentOverlay = activeWeatherOverlay {
+            mapView.removeOverlay(currentOverlay)
+            activeWeatherOverlay = nil
+        }
+        
+        guard let layerType = layerType, !layerType.isEmpty else { return }
+        
+        if layerType == "precipitation_new" {
+            // Use RainViewer API for free, live radar (No API key needed!)
+            fetchRainViewerOverlay()
+        } else {
+            // Using OpenWeatherMap format for layers (e.g. clouds_new, wind_new)
+            // Note: New OpenWeatherMap API keys take up to 2 hours to activate!
+            let apiKey = "01c153ace018135dea34596d064e9f78"
+            let urlTemplate = "https://tile.openweathermap.org/map/\(layerType)/{z}/{x}/{y}.png?appid=\(apiKey)"
+            
+            let overlay = WeatherTileOverlay(urlTemplate: urlTemplate)
+            overlay.canReplaceMapContent = false // Keep the globe visible underneath
+            overlay.maximumZ = 6 // Stop fetching new tiles after zoom 6, just stretch them!
+            
+            mapView.addOverlay(overlay)
+            activeWeatherOverlay = overlay
+        }
+    }
+
+    private func fetchRainViewerOverlay() {
+        guard let url = URL(string: "https://api.rainviewer.com/public/weather-maps.json") else { return }
+        let task = URLSession.shared.dataTask(with: url) { [weak self] data, response, error in
+            guard let self = self, let data = data, error == nil else { return }
+            
+            do {
+                if let json = try JSONSerialization.jsonObject(with: data, options: []) as? [String: Any],
+                   let host = json["host"] as? String,
+                   let radar = json["radar"] as? [String: Any],
+                   let past = radar["past"] as? [[String: Any]],
+                   let latest = past.last,
+                   let path = latest["path"] as? String {
+                    
+                    // RainViewer URL format: {host}{path}/256/{z}/{x}/{y}/2/1_1.png
+                    let urlTemplate = "\(host)\(path)/256/{z}/{x}/{y}/2/1_1.png"
+                    
+                    DispatchQueue.main.async {
+                        // Ensure we don't accidentally add if user already cleared it
+                        if let currentOverlay = self.activeWeatherOverlay {
+                            self.mapView.removeOverlay(currentOverlay)
+                        }
+                        
+                        let overlay = MKTileOverlay(urlTemplate: urlTemplate)
+                        overlay.canReplaceMapContent = false
+                        overlay.maximumZ = 6 // Stretch radar images when zooming in close
+                        self.mapView.addOverlay(overlay)
+                        self.activeWeatherOverlay = overlay
+                    }
+                }
+            } catch {
+                print("Failed to parse RainViewer JSON")
+            }
+        }
+        task.resume()
+    }
+
+    // MKMapViewDelegate method for custom overlays
+    func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
+        if let tileOverlay = overlay as? MKTileOverlay {
+            return MKTileOverlayRenderer(tileOverlay: tileOverlay)
+        }
+        return MKOverlayRenderer(overlay: overlay)
     }
 
     // MKMapViewDelegate method for custom annotation views

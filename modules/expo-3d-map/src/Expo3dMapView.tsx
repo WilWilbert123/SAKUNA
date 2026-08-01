@@ -4,6 +4,7 @@ import { ViewProps } from 'react-native';
 
 export type Expo3dMapViewProps = ViewProps & {
   earthquakeData?: { id: string; lat: number; lng: number; mag: number }[];
+  weatherLayer?: string | null;
 };
 const NativeView: React.ComponentType<Expo3dMapViewProps> =
   requireNativeViewManager('Expo3dMap');
