@@ -47,7 +47,7 @@ class Expo3dMapView: ExpoView, MKMapViewDelegate {
         addSubview(mapView)
         
         if #available(iOS 17.0, *) {
-            let config = MKImageryMapConfiguration(elevationStyle: .realistic)
+            let config = MKHybridMapConfiguration(elevationStyle: .realistic)
             mapView.preferredConfiguration = config
             
             let camera = MKMapCamera(
